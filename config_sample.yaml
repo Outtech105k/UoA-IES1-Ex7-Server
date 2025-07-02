@@ -1,3 +1,5 @@
 slack:
   webhook:
     url: https://hooks.slack.com/services/WEBHOOK_ID
+sqlite3:
+  path: auth.db

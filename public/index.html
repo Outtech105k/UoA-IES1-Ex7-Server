@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>入室履歴</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">入室履歴</h1>
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <table class="min-w-full leading-normal">
+                <thead>
+                    <tr>
+                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-sort-key="Id">
+                            ID<span class="sort-icon ml-2"></span>
+                        </th>
+                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-sort-key="Status">
+                            ステータス<span class="sort-icon ml-2"></span>
+                        </th>
+                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-sort-key="Detected">
+                            日時<span class="sort-icon ml-2"></span>
+                        </th>
+                    </tr>
+                    <!-- Filter Row -->
+                    <tr class="bg-gray-50">
+                        <th class="px-5 py-2 border-b-2 border-gray-200">
+                            <input type="text" id="filter-id" placeholder="IDで絞り込み..." class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm">
+                        </th>
+                        <th class="px-5 py-2 border-b-2 border-gray-200">
+                            <select id="filter-status" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm">
+                                <option value="">すべて</option>
+                                <option value="approved">許可</option>
+                                <option value="rejected">拒否</option>
+                            </select>
+                        </th>
+                        <th class="px-5 py-2 border-b-2 border-gray-200">
+                            <input type="text" id="filter-datepicker" placeholder="日付範囲で絞り込み..." class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm">
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="history-table-body">
+                    <!-- Data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let allHistoryData = [];
+            let filteredData = [];
+            let currentSort = {
+                key: 'Detected',
+                direction: 'desc'
+            };
+
+            const tableBody = document.getElementById('history-table-body');
+            const headers = document.querySelectorAll('th[data-sort-key]');
+            const filterId = document.getElementById('filter-id');
+            const filterStatus = document.getElementById('filter-status');
+            const datePicker = flatpickr("#filter-datepicker", {
+                mode: "range",
+                dateFormat: "Y-m-d",
+                onChange: function(selectedDates, dateStr, instance) {
+                    applyFilters();
+                },
+                onClose: function(selectedDates, dateStr, instance) {
+                    // Clear button
+                    if (dateStr === '' && selectedDates.length === 0) {
+                        applyFilters();
+                    }
+                }
+            });
+
+            function updateSortIcons() {
+                headers.forEach(header => {
+                    const iconSpan = header.querySelector('.sort-icon');
+                    if (header.dataset.sortKey === currentSort.key) {
+                        iconSpan.textContent = currentSort.direction === 'asc' ? '▲' : '▼';
+                    } else {
+                        iconSpan.textContent = '';
+                    }
+                });
+            }
+
+            function renderTable() {
+                tableBody.innerHTML = ''; // Clear existing rows
+                filteredData.forEach(item => {
+                    const row = document.createElement('tr');
+                    const statusColor = item.Status === 'approved' ? 'text-green-600' : 'text-red-600';
+                    const statusText = item.Status === 'approved' ? '許可' : '拒否';
+
+                    row.innerHTML = `
+                        <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                            <p class="text-gray-900 whitespace-no-wrap">${item.Id}</p>
+                        </td>
+                        <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                            <p class="font-semibold ${statusColor} whitespace-no-wrap">${statusText}</p>
+                        </td>
+                        <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                            <p class="text-gray-900 whitespace-no-wrap">${new Date(item.Detected).toLocaleString()}</p>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+
+            function sortData(key) {
+                if (key) { // only change sort state if key is provided
+                    if (currentSort.key === key) {
+                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSort.key = key;
+                        currentSort.direction = 'asc';
+                    }
+                }
+
+                filteredData.sort((a, b) => {
+                    let valA = a[currentSort.key];
+                    let valB = b[currentSort.key];
+
+                    if (currentSort.direction === 'asc') {
+                        return valA > valB ? 1 : -1;
+                    } else {
+                        return valA < valB ? 1 : -1;
+                    }
+                });
+
+                updateSortIcons();
+                renderTable();
+            }
+
+            function applyFilters() {
+                const idValue = filterId.value.toLowerCase();
+                const statusValue = filterStatus.value;
+                const selectedDates = datePicker.selectedDates;
+
+                filteredData = allHistoryData.filter(item => {
+                    const itemDate = new Date(item.Detected);
+
+                    let dateMatch = true;
+                    if (selectedDates.length === 2) {
+                        const startDate = new Date(selectedDates[0]);
+                        startDate.setHours(0, 0, 0, 0);
+                        const endDate = new Date(selectedDates[1]);
+                        endDate.setHours(23, 59, 59, 999);
+                        dateMatch = itemDate >= startDate && itemDate <= endDate;
+                    }
+
+                    return String(item.Id).toLowerCase().includes(idValue) &&
+                           (statusValue === '' || item.Status === statusValue) &&
+                           dateMatch;
+                });
+
+                sortData(null); // re-sort with current settings and render
+            }
+
+            headers.forEach(header => {
+                header.addEventListener('click', () => {
+                    sortData(header.dataset.sortKey);
+                });
+            });
+
+            filterId.addEventListener('input', applyFilters);
+            filterStatus.addEventListener('change', applyFilters);
+
+            fetch('/api/history')
+                .then(response => response.json())
+                .then(data => {
+                    allHistoryData = data || [];
+                    applyFilters();
+                })
+                .catch(error => console.error('Error fetching history:', error));
+        });
+    </script>
+</body>
+</html>

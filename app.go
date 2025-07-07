@@ -1,56 +1,58 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/Outtech105k/UoA-IES1-Ex7-Server/cmd"
+	"github.com/Outtech105k/UoA-IES1-Ex7-Server/routes"
+	"github.com/Outtech105k/UoA-IES1-Ex7-Server/utils"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/ory/graceful"
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags)
+	// Get App Config
+	conf, err := cmd.ReadAppConfig("config.yaml")
+	if err != nil {
+		log.Fatalln("main: Failed to read config: ", err.Error())
+	}
+	log.Println("main: Config Read")
 
-	router := gin.Default()
+	// Connect DB
+	db, err := sqlx.Open("sqlite3", conf.Sqlite3.Path)
+	if err != nil {
+		log.Fatalln("main: Failed to open SQLite3: ", err.Error())
+	}
+	defer db.Close()
 
-	router.GET("/", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, gin.H{"message": "hello, world"})
-	})
-	router.GET("/ping", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, gin.H{"message": "pong"})
-	})
+	// DB initialize
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS histories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL,
+    detected DATETIME NOT NULL
+);
+`); err != nil {
+		log.Panicln("main: Failed to initialize DB: ", err.Error())
+	}
 
-	srv := &http.Server{
+	appCtx := utils.AppContext{
+		Config: conf,
+		DB:     db,
+	}
+
+	// Setup and Run Server
+	handler := routes.SetupRouter(appCtx)
+	server := graceful.WithDefaults(&http.Server{
 		Addr:    ":8080",
-		Handler: router,
+		Handler: handler,
+	})
+
+	log.Println("main: Starting the server")
+	if err := graceful.Graceful(server.ListenAndServe, server.Shutdown); err != nil {
+		log.Fatalln("main: Failed to gracefully shutdown: ", err.Error())
 	}
-
-	go func() {
-		log.Println("Starting server on :8080")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	<-quit
-	log.Println("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server Shutdown: ", err)
-	} else {
-		log.Println("Server shut down gracefully.")
-	}
-
-	<-ctx.Done()
-	log.Println("time out 5 seconds.")
-	log.Println("Server exiting")
+	log.Println("main: Server was shutdown gracefully")
 }
